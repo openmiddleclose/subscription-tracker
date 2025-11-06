@@ -1,111 +1,139 @@
-// src/pages/BillingSuccess.jsx
 import React, { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
-import { Box, Heading, Text, Spinner, Button, useToast } from "@chakra-ui/react";
+import { useLocation } from "react-router-dom";
 import axios from "axios";
+import {
+  Box,
+  VStack,
+  Spinner,
+  Text,
+  Heading,
+  Button,
+  useToast,
+} from "@chakra-ui/react";
 
 export default function BillingSuccess() {
-  const [loading, setLoading] = useState(true);
-  const [success, setSuccess] = useState(false);
-  const [message, setMessage] = useState("");
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
 
+  const [status, setStatus] = useState("loading");
+  const [sessionData, setSessionData] = useState(null);
+
   useEffect(() => {
-    const verifySession = async () => {
-      const sessionId = searchParams.get("session_id");
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get("session_id");
 
-      if (!sessionId) {
-        setMessage("No Stripe session ID provided.");
-        setLoading(false);
-        return;
-      }
+    if (!sessionId) {
+      setStatus("error");
+      toast({
+        title: "Verification failed",
+        description: "Missing session_id in redirect URL.",
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
 
-      try {
-        // Call your backend to verify the Stripe session
-        const response = await axios.get(
-          `http://localhost:4242/api/verify-stripe-session?session_id=${sessionId}`
-        );
+    // Fetch verification data from backend
+    axios
+      .get(`http://localhost:3001/retrieve-checkout-session?session_id=${sessionId}`)
+      .then((res) => {
+        const data = res.data;
+        console.log("✅ Verification response:", data);
 
-        const { subscriptionStatus, metadata } = response.data;
-        const userId = metadata?.userId;
+        if (data.paymentStatus === "paid") {
+          setStatus("success");
+          setSessionData(data);
 
-        if (!userId) throw new Error("No user ID found in Stripe session metadata");
-
-        if (subscriptionStatus === "active") {
-          // Upgrade user plan in Supabase
-          const { error } = await supabase
-            .from("profiles")
-            .update({ plan: "premium" })
-            .eq("id", userId);
-
-          if (error) throw error;
-
-          setSuccess(true);
-          setMessage("Your subscription is now active! You are upgraded to Premium.");
           toast({
-            title: "Subscription upgraded",
-            description: "You now have access to Premium features.",
+            title: "Payment Verified ✅",
+            description: "Your plan has been upgraded successfully!",
             status: "success",
-            duration: 5000,
+            duration: 4000,
             isClosable: true,
           });
-
-          // Redirect to dashboard after 3 seconds
-          setTimeout(() => navigate("/dashboard"), 3000);
         } else {
-          setSuccess(false);
-          setMessage(
-            `Subscription not active (status: ${subscriptionStatus}). Please contact support.`
-          );
+          setStatus("unpaid");
           toast({
-            title: "Subscription inactive",
-            description: `Subscription status: ${subscriptionStatus}`,
+            title: "Payment not completed",
+            description: "Your payment could not be confirmed.",
             status: "warning",
-            duration: 5000,
+            duration: 4000,
             isClosable: true,
           });
         }
-      } catch (error) {
-        console.error("Billing success error:", error);
-        setSuccess(false);
-        setMessage(
-          error.response?.data?.error || error.message || "An unknown error occurred verifying your subscription."
-        );
+      })
+      .catch((err) => {
+        console.error("❌ Verification failed:", err);
+        setStatus("error");
         toast({
-          title: "Subscription verification failed",
-          description: error.response?.data?.error || error.message,
+          title: "Verification failed",
+          description: "Could not verify payment session.",
           status: "error",
-          duration: 5000,
+          duration: 4000,
           isClosable: true,
         });
-      } finally {
-        setLoading(false);
-      }
-    };
+      });
+  }, [location.search, toast]);
 
-    verifySession();
-  }, [searchParams, toast, navigate]);
+  const handleGoDashboard = () => {
+    window.location.href = "/dashboard";
+  };
 
   return (
-    <Box textAlign="center" mt={20}>
-      {loading ? (
-        <>
+    <Box p={10} textAlign="center">
+      {status === "loading" && (
+        <VStack spacing={4}>
           <Spinner size="xl" />
-          <Text mt={4}>Verifying your subscription...</Text>
-        </>
-      ) : (
-        <>
-          <Heading mb={4}>{success ? "Success!" : "Oops!"}</Heading>
-          <Text mb={6}>{message}</Text>
-          {!success && (
-            <Button colorScheme="blue" onClick={() => navigate("/subscriptions")}>
-              Go Back to Subscriptions
-            </Button>
-          )}
-        </>
+          <Text fontSize="lg" color="gray.500">
+            Verifying your payment...
+          </Text>
+        </VStack>
+      )}
+
+      {status === "success" && sessionData && (
+        <VStack spacing={5}>
+          <Heading color="green.400">✅ Payment Successful!</Heading>
+          <Text fontSize="lg">
+            You have successfully upgraded to{" "}
+            <b>{sessionData.planName || "Premium Plan"}</b>.
+          </Text>
+          <Text>
+            Amount Paid:{" "}
+            <b>
+              {sessionData.amountTotal} {sessionData.currency?.toUpperCase()}
+            </b>
+          </Text>
+          <Text fontSize="sm" color="gray.500">
+            User ID: {sessionData.userId}
+          </Text>
+          <Button colorScheme="blue" onClick={handleGoDashboard}>
+            Go to Dashboard
+          </Button>
+        </VStack>
+      )}
+
+      {status === "unpaid" && (
+        <VStack spacing={3}>
+          <Heading color="orange.400">⚠️ Payment Incomplete</Heading>
+          <Text>Please try again or contact support if you were charged.</Text>
+          <Button colorScheme="blue" onClick={() => (window.location.href = "/billing")}>
+            Return to Billing
+          </Button>
+        </VStack>
+      )}
+
+      {status === "error" && (
+        <VStack spacing={3}>
+          <Heading color="red.400">❌ Verification Failed</Heading>
+          <Text>
+            We couldn’t verify your payment. Please refresh this page or contact
+            support.
+          </Text>
+          <Button colorScheme="red" onClick={() => (window.location.href = "/billing")}>
+            Try Again
+          </Button>
+        </VStack>
       )}
     </Box>
   );

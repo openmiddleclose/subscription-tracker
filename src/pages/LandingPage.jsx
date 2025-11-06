@@ -12,8 +12,8 @@ import {
   useColorMode,
   useColorModeValue,
   Flex,
-  keyframes,
 } from "@chakra-ui/react";
+import { keyframes } from "@emotion/react"; // ✅ Correct import
 import { SunIcon, MoonIcon } from "@chakra-ui/icons";
 import { useNavigate } from "react-router-dom";
 

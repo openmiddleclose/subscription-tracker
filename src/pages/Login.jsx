@@ -13,11 +13,10 @@ import {
   Image,
   Flex,
   useColorModeValue,
-  keyframes,
 } from "@chakra-ui/react";
+import { keyframes } from "@emotion/react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import OAuthButton from "../components/OAuthButton"; // ✅ Import OAuthButton
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -33,7 +32,6 @@ export default function Login() {
   const textColor = useColorModeValue("gray.700", "gray.200");
   const glowColor = useColorModeValue("blue.300", "blue.500");
 
-  // 🔹 Logo glow animation
   const pulse = keyframes`
     0% { box-shadow: 0 0 0px ${glowColor}; }
     50% { box-shadow: 0 0 20px ${glowColor}; }
@@ -41,7 +39,6 @@ export default function Login() {
   `;
   const logoAnimation = `${pulse} 2s infinite`;
 
-  // 🔹 Check if user already logged in
   useEffect(() => {
     const checkUser = async () => {
       const { data } = await supabase.auth.getUser();
@@ -54,7 +51,6 @@ export default function Login() {
     checkUser();
   }, [navigate]);
 
-  // 🔹 Email/Password login
   const handleLogin = async () => {
     try {
       setSubmitting(true);
@@ -81,7 +77,6 @@ export default function Login() {
     }
   };
 
-  // 🔹 Forgot Password handler
   const handlePasswordReset = async () => {
     if (!email) {
       toast({
@@ -123,7 +118,12 @@ export default function Login() {
 
   if (loading) {
     return (
-      <Flex minH="100vh" justify="center" align="center" bg={useColorModeValue("gray.50", "gray.900")}>
+      <Flex
+        minH="100vh"
+        justify="center"
+        align="center"
+        bg={useColorModeValue("gray.50", "gray.900")}
+      >
         <Spinner size="xl" />
       </Flex>
     );
@@ -149,7 +149,6 @@ export default function Login() {
         _hover={{ transform: "translateY(-5px)", shadow: "3xl" }}
       >
         <VStack spacing={6} w="full">
-          {/* Logo */}
           <Box
             p={4}
             borderRadius="2xl"
@@ -164,10 +163,7 @@ export default function Login() {
             />
           </Box>
 
-          <Heading
-            size={{ base: "md", md: "lg" }}
-            color={useColorModeValue("blue.800", "blue.200")}
-          >
+          <Heading size={{ base: "md", md: "lg" }} color="blue.500">
             Login
           </Heading>
 
@@ -193,7 +189,6 @@ export default function Login() {
               w="full"
             />
 
-            {/* Forgot Password Link */}
             <Flex justify="flex-end" w="full">
               <Link
                 color="blue.500"
@@ -206,7 +201,6 @@ export default function Login() {
               </Link>
             </Flex>
 
-            {/* Email/Password Login */}
             <Button
               colorScheme="blue"
               size="lg"
@@ -214,49 +208,17 @@ export default function Login() {
               w="full"
               onClick={handleLogin}
               isLoading={submitting}
-              _hover={{
-                boxShadow: `0 0 15px ${glowColor}`,
-                transform: "scale(1.05)",
-                bg: useColorModeValue("blue.500", "blue.600"),
-              }}
-              _active={{
-                bg: useColorModeValue("blue.600", "blue.700"),
-              }}
             >
               Login
             </Button>
 
-            {/* Divider */}
-            <Text>OR</Text>
-
-            {/* Google Login using reusable component */}
-            <OAuthButton
-              provider="google"
-              label="Continue with Google"
-              colorScheme="red"
-              iconSrc="/images/google-icon.png"
-            />
+            <Text color="gray.500" fontSize="sm">
+              Don’t have an account?{" "}
+              <Link as={RouterLink} to="/signup" color="blue.500" fontWeight="semibold">
+                Sign up
+              </Link>
+            </Text>
           </VStack>
-
-          {/* Terms notice under login button */}
-          <Text fontSize="xs" color={textColor} mt={2}>
-            By logging in, you agree to our{" "}
-            <Link as={RouterLink} to="/terms" color="blue.500" fontWeight="semibold">
-              Terms of Service
-            </Link>{" "}
-            and{" "}
-            <Link as={RouterLink} to="/privacy" color="blue.500" fontWeight="semibold">
-              Privacy Policy
-            </Link>
-            .
-          </Text>
-
-          <Text fontSize="sm" color={textColor}>
-            Don’t have an account?{" "}
-            <Link as={RouterLink} to="/signup" color="blue.500" fontWeight="semibold">
-              Sign up
-            </Link>
-          </Text>
         </VStack>
       </Box>
     </Flex>

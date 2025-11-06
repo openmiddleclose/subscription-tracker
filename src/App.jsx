@@ -12,12 +12,15 @@ import ResetPassword from "./pages/ResetPassword";
 import SavingsRecommendations from "./pages/SavingsRecommendations";
 import BillingSuccess from "./pages/BillingSuccess";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
-import StripeCheckoutPage from "./pages/StripeCheckout.jsx"; // ✅ Page, not component
+import StripeCheckoutPage from "./pages/StripeCheckout.jsx";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 // 🔹 Component Imports
 import ProtectedRoute from "./components/ProtectedRoute";
+
+// ✅ Temporary test line — remove after confirming key loads correctly
+console.log("Stripe Publishable Key:", import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 export default function App() {
   return (
@@ -28,7 +31,6 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/billing-success" element={<BillingSuccess />} />
 
         {/* 🔹 Terms & Privacy */}
         <Route path="/terms" element={<TermsOfService />} />
@@ -76,6 +78,16 @@ export default function App() {
           element={
             <ProtectedRoute>
               <StripeCheckoutPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 🔹 Stripe Success Page */}
+        <Route
+          path="/success"
+          element={
+            <ProtectedRoute>
+              <BillingSuccess />
             </ProtectedRoute>
           }
         />

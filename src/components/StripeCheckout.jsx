@@ -2,22 +2,19 @@ import React from "react";
 import { Button, useToast } from "@chakra-ui/react";
 import axios from "axios";
 
-export default function StripeCheckout({ userId, email, plan }) {
+export default function StripeCheckout({ plan }) {
   const toast = useToast();
 
   const handleCheckout = async () => {
     try {
-      const { data } = await axios.post("http://localhost:4242/api/create-stripe-session", {
-        userId,
-        email,
-        planId: plan.id,
+      const { data } = await axios.post("http://localhost:3001/create-checkout-session", {
+        planName: plan.name,
+        price: plan.price,
       });
 
-      if (data.url) {
-        window.location.href = data.url; // Navigate to Stripe checkout
-      }
+      if (data.url) window.location.href = data.url;
     } catch (err) {
-      console.error(err);
+      console.error("Stripe checkout error:", err);
       toast({
         title: "Checkout failed",
         description: err.response?.data?.error || err.message,
@@ -30,7 +27,7 @@ export default function StripeCheckout({ userId, email, plan }) {
 
   return (
     <Button colorScheme="blue" onClick={handleCheckout}>
-      Proceed to Stripe Checkout
+      Proceed to Checkout
     </Button>
   );
 }
