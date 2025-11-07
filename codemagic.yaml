@@ -2,7 +2,7 @@ workflows:
   build_and_deploy_vercel:
     name: Build & Deploy (Vercel)
     max_build_duration: 60
-    instance_type: linux
+    instance_type: e1-standard-2
     environment:
       node: 20
       npm: latest
