@@ -1,0 +1,10 @@
+{
+  "appId": "com.subscription.tracker",
+  "appName": "Subscription Tracker",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://subscription-tracker-fawn-seven.vercel.app",
+    "cleartext": true
+  }
+}
