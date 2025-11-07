@@ -1,8 +1,8 @@
 workflows:
-  build_and_deploy_vercel:
-    name: Build & Deploy (Vercel)
-    max_build_duration: 60
-    instance_type: e1-standard-2
+  build_web:
+    name: Build Subscription Tracker (Web)
+    max_build_duration: 30
+    instance_type: e1-standard-2 # <--- change this
     environment:
       node: 20
       npm: latest
@@ -10,12 +10,13 @@ workflows:
         BUILD_DIR: "dist"
     scripts:
       - name: Install dependencies
-        script: npm ci
+        script: npm install
       - name: Build project
         script: npm run build
-      - name: Install Vercel CLI
-        script: npm install -g vercel
-      - name: Vercel deploy (production)
-        script: vercel deploy --prod --confirm --token $VERCEL_TOKEN --cwd $BUILD_DIR
+      - name: List build output
+        script: ls -la $BUILD_DIR
     artifacts:
       - $BUILD_DIR/**
+    publishing:
+      web:
+        folder: $BUILD_DIR
