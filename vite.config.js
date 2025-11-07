@@ -1,16 +1,43 @@
 // vite.config.js
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
-// ✅ Vite configuration for React + Chakra UI + Supabase + Stripe
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      includeAssets: ["favicon.svg", "robots.txt", "apple-touch-icon.png"],
+      manifest: {
+        name: "Subscription Tracker",
+        short_name: "SubTracker",
+        description: "Track all your subscriptions easily",
+        theme_color: "#ffffff",
+        background_color: "#ffffff",
+        display: "standalone",
+        scope: "/",
+        start_url: "/",
+        icons: [
+          {
+            src: "pwa-192x192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "pwa-512x512.png",
+            sizes: "512x512",
+            type: "image/png",
+          },
+        ],
+      },
+    }),
+  ],
   server: {
     port: 5173,
     open: true, // Open browser automatically during dev
   },
   optimizeDeps: {
-    // Pre-bundle dependencies to avoid Vercel build errors
     include: [
       "axios",
       "dayjs",
@@ -28,17 +55,15 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        // Let Vite handle code splitting
-        manualChunks: undefined,
+        manualChunks: undefined, // Let Vite handle code splitting
       },
-      // If you want to externalize specific modules in the future:
-      // external: ["axios", "dayjs"],
+      // external: ["axios", "dayjs"], // Optional externalization
     },
-    chunkSizeWarningLimit: 2000, // optional, increase warning limit
+    chunkSizeWarningLimit: 2000, // Increase warning limit
   },
   resolve: {
     alias: {
-      "@": "/src", // optional alias for cleaner imports
+      "@": "/src", // Cleaner imports
     },
   },
 });

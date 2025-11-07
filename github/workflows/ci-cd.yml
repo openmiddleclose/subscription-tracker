@@ -1,0 +1,72 @@
+name: Build Subscription Tracker
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build_web:
+    name: Build Web App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: List build output
+        run: ls -la dist
+
+      - name: Deploy to Vercel (optional)
+        if: ${{ secrets.VERCEL_TOKEN }}
+        uses: amondnet/vercel-action@v22
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: .
+          prod: true
+
+  build_android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    needs: build_web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web for Capacitor
+        run: npm run build
+
+      - name: Copy web assets to Android
+        run: npx cap copy android
+
+      - name: Build Android APK
+        run: cd android && ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
