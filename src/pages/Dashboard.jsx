@@ -25,24 +25,22 @@ import {
   DrawerBody,
   DrawerCloseButton,
   Badge,
-  Wrap,
-  WrapItem,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
-import { FiLogOut, FiBell } from "react-icons/fi";
+import { FiLogOut, FiBell, FiCheck } from "react-icons/fi";
 import { FaMoon, FaSun } from "react-icons/fa";
 import {
   PieChart,
   Pie,
   Cell,
   Tooltip,
+  ResponsiveContainer,
   Legend,
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
-  ResponsiveContainer,
 } from "recharts";
 import { supabase } from "../supabaseClient";
 import AddSubscriptionModal from "../components/AddSubscriptionModal";
@@ -62,15 +60,16 @@ export default function Dashboard() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [plan, setPlan] = useState("");
+  const [plan, setPlan] = useState(""); 
 
   const toast = useToast();
   const navigate = useNavigate();
   const { colorMode, toggleColorMode } = useColorMode();
   const bgCard = useColorModeValue("white", "gray.800");
   const bgPage = useColorModeValue("gray.50", "gray.900");
+  const notifText = useColorModeValue("gray.700", "gray.100");
 
-  // ------------------- Fetch & Realtime -------------------
+  // ------------------- Data Fetch & Realtime -------------------
   useEffect(() => {
     fetchProfile();
     fetchData();
@@ -218,6 +217,25 @@ export default function Dashboard() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
+  // ------------------- Actions -------------------
+  const handleLogout = async () => { await supabase.auth.signOut(); navigate("/"); };
+  const handleDelete = async (id) => {
+    const { error } = await supabase.from("subscriptions").delete().eq("id", id);
+    if (error) toast({ title: "Error deleting subscription", status: "error" });
+    else { toast({ title: "Subscription deleted", status: "success" }); fetchData(); }
+  };
+  const handleEdit = (sub) => { setEditData(sub); setIsModalOpen(true); };
+
+  const getPaymentsForSub = (subId) =>
+    payments.filter((p) => p.subscription_id === subId).sort((a, b) => new Date(a.payment_date) - new Date(b.payment_date));
+
+  const getPreviousAmount = (sub) => {
+    const subPayments = getPaymentsForSub(sub.id);
+    if (subPayments.length > 1) return subPayments[subPayments.length - 2].amount;
+    if (subPayments.length === 1) return sub.amount;
+    return undefined;
+  };
+
   // ------------------- Filtered Subscriptions -------------------
   const filteredSubscriptions = useMemo(() => {
     return subscriptions
@@ -239,286 +257,206 @@ export default function Dashboard() {
         if (sortOption === "next_renewal_date") return new Date(a.next_renewal_date) - new Date(b.next_renewal_date);
         return a.name.localeCompare(b.name);
       });
-  }, [subscriptions, search, filterCategory, filterStatus, sortOption]);
+  }, [subscriptions, search, filterCategory, filterStatus, sortOption, payments]);
+
+  // ------------------- Analytics -------------------
+  const categoryTotals = payments.reduce((acc, p) => {
+    const sub = subscriptions.find((s) => s.id === p.subscription_id);
+    const category = sub?.category || "Other";
+    acc[category] = (acc[category] || 0) + parseFloat(p.amount);
+    return acc;
+  }, {});
+  const totalSpent = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0);
+  const pieData = Object.keys(categoryTotals).map((cat) => ({ name: cat, value: categoryTotals[cat], percent: ((categoryTotals[cat] / totalSpent) * 100).toFixed(1) }));
+  const COLORS = ["#3182CE", "#2F855A", "#DD6B20", "#805AD5", "#E53E3E", "#38B2AC"];
+  const monthlyCategoryTotals = {};
+  payments.forEach((p) => {
+    const month = dayjs(p.payment_date).format("YYYY-MM");
+    const sub = subscriptions.find((s) => s.id === p.subscription_id);
+    const category = sub?.category || "Other";
+    if (!monthlyCategoryTotals[month]) monthlyCategoryTotals[month] = {};
+    monthlyCategoryTotals[month][category] = (monthlyCategoryTotals[month][category] || 0) + parseFloat(p.amount);
+  });
+  const stackedBarData = Object.keys(monthlyCategoryTotals).sort().map((month) => ({ month, ...monthlyCategoryTotals[month] }));
 
   const categories = ["All", ...Array.from(new Set(subscriptions.map((s) => s.category)))];
   const statuses = ["All", "Upcoming", "Due Soon", "Overdue"];
-  const getStatusColor = (status) =>
-    status === "Overdue" ? "red.400" : status === "Due Soon" ? "yellow.400" : "gray.400";
+  const getStatusColor = (status) => status === "Overdue" ? "red.400" : status === "Due Soon" ? "yellow.400" : "gray.400";
 
-  // ------------------- Chart Data -------------------
-  const categoryData = useMemo(() => {
-    const counts = {};
-    subscriptions.forEach((sub) => {
-      counts[sub.category] = (counts[sub.category] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [subscriptions]);
-
-  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#AF19FF"];
-
-  const monthlySpending = useMemo(() => {
-    const data = {};
-    subscriptions.forEach((sub) => {
-      const month = dayjs(sub.next_renewal_date).format("MMM");
-      data[month] = (data[month] || 0) + (sub.amount || 0);
-    });
-    return Object.entries(data).map(([month, total]) => ({ month, total }));
-  }, [subscriptions]);
-
+  // ------------------- Render -------------------
   return (
     <Box minH="100vh" bg={bgPage} p={{ base: 4, md: 8 }}>
       {/* Header */}
       <Flex justify="space-between" align="center" mb={6} flexWrap="wrap">
         <HStack spacing={4} align="center">
-          {loadingProfile ? (
-            <Spinner size="sm" />
-          ) : (
-            <Avatar
-              size="md"
-              name={profile?.username || "User"}
-              src={profile?.avatar_url || undefined}
-              cursor="pointer"
-              onClick={() => navigate("/profile")}
-            />
-          )}
+          {loadingProfile ? <Spinner size="sm" /> :
+            <Avatar size="md" name={profile?.username || "User"} src={profile?.avatar_url || undefined} cursor="pointer" onClick={() => navigate("/profile")} />
+          }
           <Box>
-            <Heading size="md" fontSize={{ base: "md", md: "lg" }}>
-              Welcome back, {profile?.username || "User"} 👋
-            </Heading>
-            <Text fontSize={{ base: "xs", md: "sm" }} color={useColorModeValue("gray.500", "gray.300")}>
-              Track your subscriptions effortlessly
-            </Text>
-            <Text fontSize="sm" color="orange.400" fontWeight="bold">
-              Plan: {plan?.toUpperCase() || "FREE"}
-            </Text>
+            <Heading size="md">Welcome back, {profile?.username || "User"} 👋</Heading>
+            <Text fontSize="sm" color={useColorModeValue("gray.500", "gray.300")}>Track your subscriptions effortlessly</Text>
+            <Text fontSize="sm" color="orange.400" fontWeight="bold">Plan: {plan?.toUpperCase() || "FREE"}</Text>
           </Box>
         </HStack>
 
-        <HStack spacing={2} mt={{ base: 3, md: 0 }}>
-          <IconButton
-            aria-label="Notifications"
-            icon={<FiBell />}
-            onClick={() => setIsNotifOpen(true)}
-            position="relative"
-            size="sm"
-          >
-            {notifications.filter((n) => !n.read).length > 0 && (
-              <Badge
-                colorScheme="red"
-                borderRadius="full"
-                position="absolute"
-                top="-1"
-                right="-1"
-                fontSize="0.7em"
-              >
-                {notifications.filter((n) => !n.read).length}
+        <HStack spacing={3} mt={{ base: 3, md: 0 }}>
+          <IconButton aria-label="Notifications" icon={<FiBell />} onClick={() => setIsNotifOpen(true)} position="relative">
+            {notifications.filter(n => !n.read).length > 0 && (
+              <Badge colorScheme="red" borderRadius="full" position="absolute" top="-2" right="-2">
+                {notifications.filter(n => !n.read).length}
               </Badge>
             )}
           </IconButton>
 
-          <IconButton
-            aria-label="Toggle Dark Mode"
-            icon={colorMode === "light" ? <FaMoon /> : <FaSun />}
-            onClick={toggleColorMode}
-            size="sm"
-          />
-          <Button
-            leftIcon={<FiLogOut />}
-            colorScheme="red"
-            variant="outline"
-            size="sm"
-            onClick={() => supabase.auth.signOut().then(() => navigate("/"))}
-          >
-            Logout
-          </Button>
+          <IconButton aria-label="Toggle Dark Mode" icon={colorMode === "light" ? <FaMoon /> : <FaSun />} onClick={toggleColorMode} />
+          <Button leftIcon={<FiLogOut />} colorScheme="red" variant="outline" size="sm" onClick={handleLogout}>Logout</Button>
         </HStack>
       </Flex>
 
-      {/* Subscriptions Section */}
-      <Box bg={bgCard} shadow="lg" borderRadius="2xl" p={4} w="100%">
-        <Flex justify="space-between" mb={4} flexWrap="wrap">
-          <Heading size="md" mb={{ base: 2, md: 0 }}>
-            Active Subscriptions
-          </Heading>
-          <Wrap spacing={2} mb={{ base: 2, md: 0 }}>
-            <WrapItem>
-              <Button colorScheme="orange" size="sm" onClick={() => navigate("/subscriptions")}>
-                Upgrade Plan
-              </Button>
-            </WrapItem>
-            <WrapItem>
-              <Button
-                colorScheme="blue"
-                size="sm"
-                onClick={() => {
-                  setEditData(null);
-                  setIsModalOpen(true);
-                }}
-              >
-                + Add
-              </Button>
-            </WrapItem>
-            <WrapItem>
-              <Button colorScheme="teal" size="sm" onClick={() => navigate("/savings")}>
-                View Savings Recommendations
-              </Button>
-            </WrapItem>
-          </Wrap>
-        </Flex>
-
-        <HStack mb={4} spacing={2} flexWrap="wrap">
-          <Input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            flex={{ base: 1, md: "auto" }}
-            minW={{ base: "100%", md: "150px" }}
-          />
-          <Select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            flex={{ base: 1, md: "auto" }}
-            minW={{ base: "100%", md: "120px" }}
-          >
-            {categories.map((cat) => (
-              <option key={cat}>{cat}</option>
-            ))}
-          </Select>
-          <Select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            flex={{ base: 1, md: "auto" }}
-            minW={{ base: "100%", md: "120px" }}
-          >
-            {statuses.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </Select>
-          <Select
-            value={sortOption}
-            onChange={(e) => setSortOption(e.target.value)}
-            flex={{ base: 1, md: "auto" }}
-            minW={{ base: "100%", md: "150px" }}
-          >
-            <option value="name">Sort by Name</option>
-            <option value="amount">Sort by Amount</option>
-            <option value="next_renewal_date">Sort by Renewal Date</option>
-          </Select>
-        </HStack>
-
-        <VStack spacing={3} align="stretch">
-          {filteredSubscriptions.map((sub) => {
-            let status = "Upcoming";
-            const today = dayjs();
-            const renewalDate = sub.next_renewal_date ? dayjs(sub.next_renewal_date) : null;
-            if (renewalDate) {
-              if (renewalDate.isBefore(today, "day")) status = "Overdue";
-              else if (renewalDate.diff(today, "day") <= 3) status = "Due Soon";
-            }
-            return (
-              <SubscriptionCard
-                key={sub.id}
-                subscription={sub}
-                onDelete={() => {}}
-                onEdit={() => {}}
-                borderColor={status === "Overdue" ? "red.400" : undefined}
-                status={status}
-                statusColor={getStatusColor(status)}
-              />
-            );
-          })}
-        </VStack>
-      </Box>
-
-      {/* Analytics Section */}
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} mt={6}>
-        <Box bg={bgCard} p={4} borderRadius="2xl" shadow="md">
-          <Heading size="sm" mb={2}>
-            Subscriptions by Category
-          </Heading>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={categoryData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={70}
-                label
-              >
-                {categoryData.map((entry, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </Box>
-
-        <Box bg={bgCard} p={4} borderRadius="2xl" shadow="md">
-          <Heading size="sm" mb={2}>
-            Monthly Spending
-          </Heading>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={monthlySpending} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="total" fill="#3182CE" name="Amount" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Box>
-      </SimpleGrid>
-
-      {/* Add Subscription Modal */}
-      <AddSubscriptionModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onAdded={() => {}}
-        editData={editData}
-      />
-
       {/* Notifications Drawer */}
-      <Drawer isOpen={isNotifOpen} placement="right" onClose={() => setIsNotifOpen(false)} size="xs">
+      <Drawer isOpen={isNotifOpen} placement="right" onClose={() => setIsNotifOpen(false)} size="sm">
         <DrawerOverlay />
-        <DrawerContent>
+        <DrawerContent bg={bgCard}>
           <DrawerCloseButton />
-          <DrawerHeader>Notifications</DrawerHeader>
+          <DrawerHeader>
+            Notifications
+            <Button size="xs" ml={4} onClick={markAllRead}>Mark All as Read</Button>
+          </DrawerHeader>
           <DrawerBody>
-            <VStack spacing={3} align="stretch">
-              {notifications.length === 0 ? (
-                <Text>No notifications</Text>
-              ) : (
-                notifications.map((notif) => (
+            {notifications.length === 0 ? <Text color={notifText}>No notifications</Text> :
+              <VStack align="stretch" spacing={3}>
+                {notifications.map((n) => (
                   <Box
-                    key={notif.id}
-                    p={2}
+                    key={n.id}
+                    p={3}
+                    bg={n.type === "Overdue" ? useColorModeValue("red.50", "red.800") :
+                        n.type === "Due Soon" ? useColorModeValue("yellow.50", "yellow.800") :
+                        useColorModeValue("green.50", "green.800")}
+                    borderLeftWidth={4}
+                    borderLeftColor={n.type === "Overdue" ? "red.400" :
+                        n.type === "Due Soon" ? "yellow.400" :
+                        "green.400"}
                     borderRadius="md"
-                    bg={notif.read ? bgPage : useColorModeValue("yellow.100", "yellow.700")}
-                    onClick={() => markNotificationRead(notif.id)}
-                    cursor="pointer"
+                    opacity={n.read ? 0.6 : 1}
+                    position="relative"
                   >
-                    <Text fontSize="sm" fontWeight="bold">
-                      {notif.type}
-                    </Text>
-                    <Text fontSize="xs">{notif.message}</Text>
+                    <Text fontWeight="bold" color={notifText}>{n.type}</Text>
+                    <Text fontSize="sm" color={notifText}>{n.message}</Text>
+                    {!n.read && (
+                      <IconButton
+                        size="xs"
+                        icon={<FiCheck />}
+                        position="absolute"
+                        top={2}
+                        right={2}
+                        onClick={() => markNotificationRead(n.id)}
+                        aria-label="Mark as read"
+                      />
+                    )}
                   </Box>
-                ))
-              )}
-              {notifications.length > 0 && (
-                <Button mt={2} size="sm" onClick={markAllRead}>
-                  Mark All as Read
-                </Button>
-              )}
-            </VStack>
+                ))}
+              </VStack>
+            }
           </DrawerBody>
         </DrawerContent>
       </Drawer>
+
+      {/* Subscriptions & Analytics */}
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+        {/* Subscriptions */}
+        <Box bg={bgCard} shadow="lg" borderRadius="2xl" p={4}>
+          <Flex justify="space-between" mb={4} flexWrap="wrap">
+            <Heading size="md">Active Subscriptions</Heading>
+            <HStack spacing={2}>
+              <Button colorScheme="orange" size="sm" onClick={() => navigate("/subscriptions")}>Upgrade Plan</Button>
+              <Button colorScheme="blue" size="sm" onClick={() => { setEditData(null); setIsModalOpen(true); }}>+ Add</Button>
+              <Button colorScheme="teal" size="sm" onClick={() => navigate("/savings")}>View Savings Recommendations</Button>
+            </HStack>
+          </Flex>
+
+          <HStack mb={4} spacing={3} flexWrap="wrap">
+            <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+              {categories.map((cat) => <option key={cat}>{cat}</option>)}
+            </Select>
+            <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              {statuses.map((s) => <option key={s}>{s}</option>)}
+            </Select>
+            <Select value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
+              <option value="name">Sort by Name</option>
+              <option value="amount">Sort by Amount</option>
+              <option value="next_renewal_date">Sort by Renewal Date</option>
+            </Select>
+          </HStack>
+
+          {filteredSubscriptions.length === 0 ? <Text color={useColorModeValue("gray.500", "gray.300")}>No subscriptions found.</Text> :
+            <VStack spacing={3} align="stretch">
+              {filteredSubscriptions.map((sub) => {
+                let status = "Upcoming";
+                const today = dayjs();
+                const renewalDate = sub.next_renewal_date ? dayjs(sub.next_renewal_date) : null;
+                if (renewalDate) {
+                  if (renewalDate.isBefore(today, "day")) status = "Overdue";
+                  else if (renewalDate.diff(today, "day") <= 3) status = "Due Soon";
+                }
+                return (
+                  <SubscriptionCard
+                    key={sub.id}
+                    subscription={sub}
+                    onDelete={handleDelete}
+                    onEdit={() => handleEdit(sub)}
+                    borderColor={status === "Overdue" ? "red.400" : undefined}
+                    status={status}
+                    statusColor={getStatusColor(status)}
+                    previousAmount={getPreviousAmount(sub)}
+                  />
+                );
+              })}
+            </VStack>
+          }
+        </Box>
+
+        {/* Analytics */}
+        <Box bg={bgCard} shadow="lg" borderRadius="2xl" p={4}>
+          <Heading size="md" mb={4}>Spending Analytics</Heading>
+
+          {pieData.length === 0 ? <Text color={useColorModeValue("gray.500", "gray.300")}>No data yet to show analytics.</Text> :
+            <Box height="350px">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${percent}%`}>
+                    {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+              <Text mt={3} fontWeight="medium" textAlign="center">Total Spent: ${totalSpent.toFixed(2)}</Text>
+            </Box>
+          }
+
+          <Divider my={6} />
+
+          <Box height="350px">
+            {stackedBarData.length === 0 ? <Text color={useColorModeValue("gray.500", "gray.300")}>No monthly data yet.</Text> :
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stackedBarData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" stroke={useColorModeValue("gray.700", "gray.100")} />
+                  <YAxis stroke={useColorModeValue("gray.700", "gray.100")} />
+                  <Tooltip />
+                  <Legend />
+                  {Object.keys(categoryTotals).map((cat, i) => (
+                    <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            }
+          </Box>
+        </Box>
+      </SimpleGrid>
+
+      <AddSubscriptionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdded={fetchData} editData={editData} />
     </Box>
   );
 }
